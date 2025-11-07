@@ -13,7 +13,6 @@ export default function TabBarIcon({ Icon, focused, size = 24, activeColor = '#4
   const color = focused ? activeColor : inactiveColor
 
   return (
-    // Use full available height so the icon centers vertically inside the tab item
     <View style={{ minWidth: size, height: '100%', alignItems: 'center', justifyContent: 'center' }}>
       <Icon color={color} width={size} height={size} />
     </View>

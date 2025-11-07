@@ -24,7 +24,7 @@ const GamifiedChallenges: React.FC<Props> = ({ subtitle, progressPct, badges = [
                     <Text className="text-emerald-500 mt-2">{pct}%</Text>
                 </View>
                 <View style={{ boxShadow: 'inset 0px 2px 2px 2px rgba(0,0,0,0.1)' }} className="h-4 bg-[#D9D9D9] rounded-full overflow-hidden">
-                    <View style={{ width: `30%`, boxShadow: 'inset 2px 2px 2px 4px rgba(0,0,0,0.1)' }} className="h-4 bg-sagenex-emerald" />
+                    <View style={{ width: `${pct}%`, boxShadow: 'inset 2px 2px 2px -4px rgba(0,0,0,0.1)' }} className="h-4 bg-sagenex-emerald" />
                 </View>
             </View>
 
