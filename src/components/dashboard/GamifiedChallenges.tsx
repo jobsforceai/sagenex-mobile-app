@@ -10,10 +10,39 @@ type Props = {
     progressPct?: number;
     badges?: Badge[];
     requirements?: Requirement[];
+    loading?: boolean;
 };
 
-const GamifiedChallenges: React.FC<Props> = ({ subtitle, progressPct, badges = [], requirements = [] }) => {
+const GamifiedChallenges: React.FC<Props> = ({ subtitle, progressPct, badges = [], requirements = [], loading = false }) => {
     const pct = Math.max(0, Math.min(100, progressPct ?? 0));
+    if (loading) {
+        // simple skeleton layout while loading
+        return (
+            <View className="w-full bg-white rounded-3xl shadow-lg p-4">
+                <View className="mb-2">
+                    <View className="h-4 w-2/3 bg-gray-200 rounded mb-3" />
+                    <View className="h-4 w-1/3 bg-gray-200 rounded" />
+                </View>
+
+                <View className="mt-3">
+                    <View className="h-4 bg-gray-200 rounded mb-2" />
+                    <View className="h-4 bg-gray-200 rounded" />
+                </View>
+
+                <View className="mt-4 flex-row">
+                    <View className="h-8 w-20 bg-gray-200 rounded mr-3" />
+                    <View className="h-8 w-20 bg-gray-200 rounded mr-3" />
+                    <View className="h-8 w-20 bg-gray-200 rounded" />
+                </View>
+
+                <View className="mt-3">
+                    <View className="h-3 bg-gray-200 rounded mb-2 w-3/4" />
+                    <View className="h-3 bg-gray-200 rounded w-2/3" />
+                </View>
+            </View>
+        );
+    }
+
     return (
         <View className="w-full bg-white rounded-3xl shadow-lg p-4">
             {subtitle ? <Text className="text-gray-600 text-md mt-1">Progress to <Text className="text-yellow-500">{subtitle}</Text></Text> : null}

@@ -15,7 +15,7 @@ const SettingsScreen = () => {
 
   const menuItems = [
     { title: 'Profile', description: 'View and edit your profile details', screen: 'Profile' as keyof MainStackParamList },
-    { title: 'Rewards', description: 'View your rewards and achievements', screen: 'Rewards' as keyof MainStackParamList },
+    // { title: 'Rewards', description: 'View your rewards and achievements', screen: 'Rewards' as keyof MainStackParamList },
     { title: 'KYC Verification', description: 'Complete your KYC verification', screen: 'KYC' as keyof MainStackParamList },
     { title: 'Payouts', description: 'View your payout history', screen: 'Payouts' as keyof MainStackParamList },
   ];

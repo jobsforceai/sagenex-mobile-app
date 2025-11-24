@@ -4,6 +4,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { MainRoutes } from '../routes';
 import MainTabNavigator from './MainTabNavigator';
 import ProfileScreen from '../../screens/settings/ProfileScreen';
+import WalletHistoryScreen from '../../screens/main/WalletHistoryScreen';
+import CourseScreen from '../../screens/main/CourseScreen';
+import PayoutsScreen from '../../screens/main/PayoutsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -28,36 +31,33 @@ const MainNavigator = () => {
           presentation: 'card',
         }}
       />
-      {/* <Stack.Screen 
-        name="Rewards"
-        component={RewardsScreen}
+      <Stack.Screen
+        name={MainRoutes.WalletHistory}
+        component={WalletHistoryScreen}
         options={{
           headerShown: true,
-          title: 'Rewards',
+          title: 'Wallet History',
           presentation: 'card',
-          headerBackTitleVisible: false,
         }}
       />
-      <Stack.Screen 
-        name="KYC"
-        component={KYCScreen}
+      <Stack.Screen
+        name={MainRoutes.Course}
+        component={CourseScreen}
         options={{
           headerShown: true,
-          title: 'KYC Verification',
+          title: 'Course',
           presentation: 'card',
-          headerBackTitleVisible: false,
         }}
       />
-      <Stack.Screen 
-        name="Payouts"
-        component={PayoutsScreen}
-        options={{
-          headerShown: true,
-          title: 'Payouts',
-          presentation: 'card',
-          headerBackTitleVisible: false,
-        }}
-      /> */}
+        <Stack.Screen 
+          name="Payouts"
+          component={PayoutsScreen}
+          options={{
+            headerShown: true,
+            title: 'Payouts',
+            presentation: 'card',
+          }}
+        />
     </Stack.Navigator>
   );
 };
