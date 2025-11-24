@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Linking } from 'react-native';
 import React, { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -53,7 +53,24 @@ const SettingsScreen = () => {
           {menuItems.map((item, index) => (
             <TouchableOpacity
               key={index}
-              onPress={() => navigation.navigate(item.screen as any)}
+              onPress={async () => {
+                try {
+                  if (item.screen === 'KYC') {
+                    const url = 'https://sgxmeta.ai/kyc';
+                    const supported = await Linking.canOpenURL(url);
+                    if (supported) {
+                      await Linking.openURL(url);
+                    } else {
+                      Alert.alert('Unable to open link', 'Your device cannot open this link.');
+                    }
+                  } else {
+                    navigation.navigate(item.screen as any);
+                  }
+                } catch (err) {
+                  console.error('Navigation error', err);
+                  Alert.alert('Error', 'Unable to open the destination.');
+                }
+              }}
               style={styles.card}
               className="rounded-2xl p-6 mb-3"
               activeOpacity={0.7}

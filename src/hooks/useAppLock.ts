@@ -18,6 +18,12 @@ export function useAppLock(defaultEnabled = true): UseAppLockReturn {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const appState = useRef<string>(AppState.currentState);
 
+  // Guards & timers to avoid re-entrant native auth loops on iOS
+  const authInProgress = useRef<boolean>(false);
+  const lastAuthAttemptAt = useRef<number | null>(null);
+  const lastAuthSuccessAt = useRef<number | null>(null);
+  const resumeTimer = useRef<number | null>(null);
+
   useEffect(() => {
     let mounted = true;
     SecureStore.getItemAsync(LOCK_KEY).then((value) => {
@@ -32,23 +38,62 @@ export function useAppLock(defaultEnabled = true): UseAppLockReturn {
     });
     return () => {
       mounted = false;
+      if (resumeTimer.current) {
+        clearTimeout(resumeTimer.current as unknown as number);
+      }
     };
   }, [defaultEnabled]);
 
   useEffect(() => {
-    const sub = AppState.addEventListener('change', handleAppStateChange);
+    const handler = (nextState: AppStateStatus) => {
+      // Debounce AppState changes to avoid native auth modal lifecycle re-triggers
+      if (appState.current.match(/inactive|background/) && nextState === 'active') {
+        if (!enabled) {
+          appState.current = nextState;
+          return;
+        }
+
+        // clear any existing timer
+        if (resumeTimer.current) {
+          clearTimeout(resumeTimer.current as unknown as number);
+        }
+
+        // schedule a deferred check
+        resumeTimer.current = (setTimeout(async () => {
+          const now = Date.now();
+
+          // skip if a successful auth happened recently (grace)
+          const successGraceMs = 5000;
+          if (lastAuthSuccessAt.current && now - lastAuthSuccessAt.current < successGraceMs) {
+            appState.current = nextState;
+            return;
+          }
+
+          // backoff after a recent attempt (avoid immediate re-tries)
+          const attemptBackoffMs = 10000;
+          if (lastAuthAttemptAt.current && now - lastAuthAttemptAt.current < attemptBackoffMs) {
+            appState.current = nextState;
+            return;
+          }
+
+          // if an auth is already in progress, don't start another
+          if (authInProgress.current) {
+            appState.current = nextState;
+            return;
+          }
+
+          // finally trigger lock/auth
+          triggerLock();
+          appState.current = nextState;
+        }, 300) as unknown) as number;
+      } else {
+        appState.current = nextState;
+      }
+    };
+
+    const sub = AppState.addEventListener('change', handler);
     return () => sub.remove();
   }, [enabled]);
-
-  const handleAppStateChange = (nextState: AppStateStatus) => {
-    if (appState.current.match(/inactive|background/) && nextState === 'active') {
-      if (enabled) {
-        // when coming back to foreground, require unlock
-        triggerLock();
-      }
-    }
-    appState.current = nextState;
-  };
 
   const isBiometricAvailable = async () => {
     try {
@@ -62,9 +107,14 @@ export function useAppLock(defaultEnabled = true): UseAppLockReturn {
   };
 
   const triggerLock = async () => {
+    // prevent concurrent auth attempts
+    if (authInProgress.current) return false;
+    lastAuthAttemptAt.current = Date.now();
+    authInProgress.current = true;
     const available = await isBiometricAvailable();
     if (!available) {
       // If biometrics are not available, don't lock the UI (optionally could fallback to passcode)
+      authInProgress.current = false;
       setLocked(false);
       return false;
     }
@@ -78,12 +128,14 @@ export function useAppLock(defaultEnabled = true): UseAppLockReturn {
         disableDeviceFallback: false,
       });
       if (res.success) {
+        lastAuthSuccessAt.current = Date.now();
         setLocked(false);
         return true;
       }
     } catch (err) {
       // ignore
     }
+    authInProgress.current = false;
     setLocked(true);
     return false;
   };
