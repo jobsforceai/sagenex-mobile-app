@@ -1,27 +1,31 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, ScrollView, Image, Pressable, Dimensions } from 'react-native';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, ScrollView, Image, Pressable, Dimensions, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import StatsList from '../../components/HomeComponents/StatsList';
 import { HomeScreenData, Profile, FinancialSummary, RankProgress, ReferralSummary, TreeData, LeaderboardEntry } from '../../types/types';
 import userApi, { getRankProgress } from '../../api/userApi';
 import IonIcons from "@react-native-vector-icons/ionicons";
 import GamifiedChallenges from '../../components/dashboard/GamifiedChallenges';
+import Skeleton from '../../components/ui/Skeleton';
+import NumericText from '../../components/ui/NumericText';
 import ReferralAndGrowth from '../../components/dashboard/ReferralAndGrowth';
 import LockedBonuses from '../../components/dashboard/LockedBonuses';
 import SmartUpdates from '../../components/dashboard/SmartUpdates';
 import SixLegTreeView from '../../components/dashboard/SixLegTreeView';
+import Leaderboard from '../../components/dashboard/Leaderboard';
 
 // small helper component to render formatted balance inside emerald card
 const formatCurrency = (value: number) => {
   try {
+    // Preserve cents (two decimal places) so the available balance is not rounded.
     return Number(value).toLocaleString('en-US', {
       style: 'currency',
       currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
   } catch (e) {
-    return `$${Number(value).toLocaleString()}`;
+    return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 };
 
@@ -109,59 +113,62 @@ const HomeScreen: React.FC = () => {
     { offset: '100%', color: '#000', opacity: '1' }
   ]
 
+  const isMounted = useRef(true);
+
   useEffect(() => {
-    let mounted = true;
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [dashRes, finRes, rankRes, referralRes, treeRes, lbRes] = await Promise.all([
-          userApi.getDashboardData(),
-          userApi.getFinancialSummary(),
-          getRankProgress(),
-          userApi.getReferralSummary(),
-          userApi.getTeamTree(),
-          userApi.getLeaderboard(),
-        ]);
-        if (!mounted) return;
-
-        if (dashRes?.error) {
-          setError(dashRes.error);
-        } else {
-          setHomeScreenData(dashRes as HomeScreenData);
-        }
-
-        if (finRes?.error) {
-          // ignore for now
-        } else {
-          setFinancial(finRes as FinancialSummary);
-        }
-
-        if (rankRes?.error) {
-          setError(rankRes.error);
-        } else {
-          setRankProgress(rankRes as RankProgress);
-        }
-
-        // set dashboard and other pieces
-        if (dashRes && !dashRes.error) setHomeScreenData(dashRes as HomeScreenData);
-        if (finRes && !finRes.error) setFinancial(finRes as FinancialSummary);
-        if (rankRes && !rankRes.error) setRankProgress(rankRes as RankProgress);
-        if (referralRes && !referralRes.error) setReferralSummary(referralRes as ReferralSummary);
-        if (treeRes && !treeRes.error) setTeamTree(treeRes as TreeData);
-        if (lbRes && !lbRes.error) setLeaderboardData(lbRes as LeaderboardEntry[]);
-      } catch (err: any) {
-        console.error('Failed to load dashboard', err);
-        setError('Failed to load dashboard');
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    fetchData();
-    return () => {
-      mounted = false;
-    };
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
   }, []);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [dashRes, finRes, rankRes, referralRes, treeRes, lbRes] = await Promise.all([
+        userApi.getDashboardData(),
+        userApi.getFinancialSummary(),
+        getRankProgress(),
+        userApi.getReferralSummary(),
+        userApi.getTeamTree(),
+        userApi.getLeaderboard(),
+      ]);
+
+      if (!isMounted.current) return;
+
+      if (dashRes?.error) {
+        setError(dashRes.error);
+      } else {
+        setHomeScreenData(dashRes as HomeScreenData);
+      }
+
+      if (!(finRes && finRes.error)) {
+        setFinancial(finRes as FinancialSummary);
+      }
+
+      if (!(rankRes && rankRes.error)) {
+        setRankProgress(rankRes as RankProgress);
+      }
+
+      if (!(referralRes && referralRes.error)) {
+        setReferralSummary(referralRes as ReferralSummary);
+      }
+
+      if (!(treeRes && treeRes.error)) {
+        setTeamTree(treeRes as TreeData);
+      }
+
+      if (!(lbRes && (lbRes as any).error)) {
+        setLeaderboardData(lbRes as LeaderboardEntry[]);
+      }
+    } catch (err: any) {
+      console.error('Failed to load dashboard', err);
+      if (isMounted.current) setError('Failed to load dashboard');
+    } finally {
+      if (isMounted.current) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
 
 
   const ranks = ["Member", "Starter", "Builder", "Leader", "Manager", "Director", "Crown"];
@@ -173,7 +180,11 @@ const HomeScreen: React.FC = () => {
         : "4x"
       : null;
   return (
-    <ScrollView className='bg-sagenex-black' showsVerticalScrollIndicator={false}>
+    <ScrollView
+      className='bg-sagenex-black'
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchData} />}
+    >
       <SafeAreaView className=''>
         {/* gradient Image svg  */}
 
@@ -181,25 +192,40 @@ const HomeScreen: React.FC = () => {
           {/* Top bar with profile pic and notifications */}
           <View className="px-4 pt-6 flex-row justify-between items-center">
             <View className="flex-row items-center">
-              <Image
-                className="w-12 h-12 rounded-full mr-4 bg-gray-100"
-                source={{
-                  uri:
-                    homeScreenData?.profile.profilePicture ||
-                    `https://ui-avatars.com/api/?name=${encodeURIComponent("sahil kale")}&background=E6F0FF&color=1F2937`
-                }}
-              />
+              {loading ? (
+                <View className="mr-4">
+                  <Skeleton variant="circle" height={48} width={48} />
+                </View>
+              ) : (
+                <Image
+                  className="w-12 h-12 rounded-full mr-4 bg-gray-100"
+                  source={{
+                    uri:
+                      homeScreenData?.profile.profilePicture ||
+                      `https://ui-avatars.com/api/?name=${encodeURIComponent(homeScreenData?.profile.fullName || '')}&background=E6F0FF&color=1F2937`
+                  }}
+                />
+              )}
             </View>
 
-            <Pressable className="w-10 h-10 rounded-full bg-gray-800 items-center justify-center">
-              <Text className="text-white text-lg">🔔</Text>
-            </Pressable>
+            <View className="flex-row items-center">
+              <Pressable className="w-10 h-10 rounded-full bg-gray-800 items-center justify-center">
+                <Text className="text-white text-lg">🔔</Text>
+              </Pressable>
+            </View>
           </View>
 
           {/* Welcome texts and level */}
           <View className="px-4 mt-12">
             <Text className="text-[36px] text-white font-extrabold">Welcome Back,</Text>
-            <Text className="text-[36px] text-sagenex-emerald font-bold mt-1">{homeScreenData?.profile.fullName}</Text>
+            {loading ? (
+              <View style={{ width: '60%' }}>
+                <Skeleton height={28} width={'70%'} />
+                <Skeleton height={18} width={'40%'} style={{ marginTop: 8 }} />
+              </View>
+            ) : (
+              <Text className="text-[36px] text-sagenex-emerald font-bold mt-1">{homeScreenData?.profile.fullName}</Text>
+            )}
 
             <View className="mt-4 flex-row items-center">
               <View className="px-3 py-1 bg-gray-800 rounded-full">
@@ -224,10 +250,28 @@ const HomeScreen: React.FC = () => {
 
 
           <View style={{ position: 'absolute', left: HORIZONTAL_PADDING, right: HORIZONTAL_PADDING, bottom: -EMERALD_CARD_H / 2 }} className="items-center">
-            <View style={{ width: '100%', height: EMERALD_CARD_H }} className="rounded-[50px] bg-[#417D61] shadow-lg items-center">
-              <View className='relative bg-sagenex-emerald w-full h-4/5 rounded-[50px] items-center '>
-                <Text className="absolute top-0 left-0 px-10 py-10 text-[49px] font-bold text-black mt-1">{formatCurrency(homeScreenData?.wallet?.availableBalance ?? 0)}</Text>
-                <Text className="absolute bottom-0 left-0 px-10 py-2 font-bold text-xl text-gray-800">Available Balance</Text>
+            <View style={{ width: '100%', height: EMERALD_CARD_H }} className="rounded-[50px] bg-[#417D61] shadow-lg">
+              <View className='bg-sagenex-emerald w-full h-4/5 rounded-[50px] items-center justify-center px-6'>
+                {loading ? (
+                  <View style={{ paddingVertical: 18, alignItems: 'center' }}>
+                    <Skeleton height={36} width={'60%'} />
+                    <Skeleton height={14} width={'40%'} style={{ marginTop: 8 }} />
+                  </View>
+                ) : (
+                  <>
+                    {/** responsive numeric font size based on window width */}
+                    {
+                      (() => {
+                        const numericFontSize = Math.round(Math.min(80, Math.max(32, windowWidth * 0.14)));
+                        return (
+                          <NumericText numberStyle={{ fontSize: numericFontSize, fontWeight: '700', color: '#000' }} style={{ textAlign: 'center' }}>{formatCurrency(homeScreenData?.wallet?.availableBalance ?? 0)}</NumericText>
+                        );
+                      })()
+                    }
+
+                    <Text style={{ marginTop: 8, fontSize: 18, fontWeight: '700', color: '#1f2937' }}>Available Balance</Text>
+                  </>
+                )}
               </View>
               <View className='w-full h-1/5 flex-col justify-center px-8'>
                 {/* <Text className='text-yellow-200 '>Earning Streams</Text> */}
@@ -239,7 +283,7 @@ const HomeScreen: React.FC = () => {
 
 
         {/* Main content area with horizontal stats */}
-        <View className="py-32 flex-col gap-4 px-4 z-0 bg-[#F5F6F8]">
+        <View className="py-32 flex-col gap-4 -mb-10 px-4 z-0 bg-[#F5F6F8]">
           {financial ? (
             <View className="">
               <Text className="text-black text-lg">Overview</Text>
@@ -260,6 +304,18 @@ const HomeScreen: React.FC = () => {
                 })()}
               />
             </View>
+          ) : loading ? (
+            <View>
+              <Text className="text-black text-lg">Overview</Text>
+              <View className="mt-3 flex-row justify-between">
+                <View style={{ width: '48%' }}>
+                  <Skeleton height={80} />
+                </View>
+                <View style={{ width: '48%' }}>
+                  <Skeleton height={80} />
+                </View>
+              </View>
+            </View>
           ) : null}
 
 
@@ -275,9 +331,130 @@ const HomeScreen: React.FC = () => {
                   return ALL_RANKS.map((r) => ({ label: r, earned: ALL_RANKS.indexOf(r) <= ALL_RANKS.indexOf(rankProgress.currentRank.name) }));
                 })()}
                 requirements={[]}
+                loading={false}
               />
             </View>
+          ) : loading ? (
+            <View className='flex-col gap-4'>
+              <Text className="text-black text-lg">Rank & Progress</Text>
+              <GamifiedChallenges loading={true} />
+            </View>
           ) : null}
+
+          {/* Courses (formerly Leaderboard) - moved into Home screen */}
+          <View className="mt-4 flex-col gap-4">
+            <Text className="text-black text-lg">Leaderboard</Text>
+
+            {/* Podium */}
+            {loading ? (
+              <View className="px-0"><View style={{ backgroundColor: '#fff' }} className="rounded-2xl p-4 mb-4">
+                <Skeleton height={14} width={'40%'} style={{ marginBottom: 8 }} />
+                <View className="flex-row items-end justify-between">
+                  <Skeleton height={90} width={80} />
+                  <Skeleton height={120} width={80} />
+                  <Skeleton height={80} width={80} />
+                </View>
+              </View></View>
+            ) : (leaderboardData && leaderboardData.length > 0 && (
+              <View style={{ backgroundColor: '#fff' }} className="rounded-2xl p-4 mb-4">
+                {/* Top Performers (Podium) */}
+                <View>
+                  <Text className="text-base font-semibold mb-3 text-black">Top Performers</Text>
+                  <View className="flex-row items-end justify-between">
+                    {(() => {
+                      const sorted = [...leaderboardData].sort((a, b) => (b.earnings ?? 0) - (a.earnings ?? 0)).slice(0, 3);
+                      const barHeights = [70, 100, 60];
+                      const colors = [
+                        { circleBg: '#FEF3C7', bar: '#FBBF24', text: '#92400E' },
+                        { circleBg: '#E6FBF3', bar: '#41DA93', text: '#065F46' },
+                        { circleBg: '#F3F4F6', bar: '#D1D5DB', text: '#374151' },
+                      ];
+                      return sorted.map((p, idx) => {
+                        const barHeight = barHeights[idx] || 60;
+                        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉';
+                        const initials = p.fullName?.split(' ').map(x => x[0]).slice(0, 2).join('').toUpperCase();
+                        const c = colors[idx];
+                        return (
+                          <View key={p.rank} style={{ flex: 1, alignItems: 'center' }}>
+                            <Text style={{ fontSize: 20, marginBottom: 6 }}>{medal}</Text>
+                            <View className="w-12 h-12 rounded-full items-center justify-center" style={{ backgroundColor: c.circleBg }}>
+                              <Text style={{ color: c.text, fontWeight: '600' }}>{initials}</Text>
+                            </View>
+                            <View style={{ backgroundColor: c.bar, height: barHeight }} className="w-14 rounded-t-lg items-center justify-end mt-2">
+                              <Text className="text-white text-xs mb-2 font-semibold">{`$${Number(p.earnings || 0).toLocaleString()}`}</Text>
+                            </View>
+                            <Text numberOfLines={1} className="text-xs mt-2 text-gray-600 max-w-[90px]">{p.fullName}</Text>
+                          </View>
+                        );
+                      });
+                    })()}
+                  </View>
+                </View>
+              </View>
+            ))}
+
+            {/* My Position */}
+            {loading ? (
+              <View style={{ backgroundColor: '#fff' }} className="rounded-2xl p-4 mb-4">
+                <Skeleton height={18} width={'30%'} style={{ marginBottom: 8 }} />
+                <Skeleton height={34} width={60} />
+                <View className="flex-row mt-3 items-center justify-between">
+                  <Skeleton height={12} width={80} />
+                  <Skeleton height={12} width={80} />
+                </View>
+              </View>
+            ) : (leaderboardData && homeScreenData && (
+              <View style={{ backgroundColor: '#fff' }} className="rounded-2xl p-4 mb-4">
+                <Text className="text-sm font-medium text-gray-600">Your Rank</Text>
+                {(() => {
+                  const userId = homeScreenData?.profile?.userId || null;
+                  const idx = leaderboardData.findIndex(e => e.userId && userId && String(e.userId) === String(userId));
+                  if (idx === -1) return <Text className="text-sm text-gray-600">Not ranked yet</Text>;
+                  const row = leaderboardData[idx];
+                  return (
+                    <>
+                      <Text className="text-3xl font-extrabold mt-1 text-black">#{row.rank}</Text>
+                      <View className="flex-row mt-3 items-center justify-between">
+                        <View>
+                          <Text className="text-xs text-gray-600">Earnings</Text>
+                          <Text className="text-sm font-semibold text-black">{`$${Number(row.earnings || 0).toLocaleString()}`}</Text>
+                        </View>
+                        <View>
+                          <Text className="text-xs text-gray-600">Packages Sold</Text>
+                          <Text className="text-sm font-semibold text-black">{row.packagesSold}</Text>
+                        </View>
+                      </View>
+                    </>
+                  );
+                })()}
+              </View>
+            ))}
+
+            {/* All Rankings */}
+            <View style={{ backgroundColor: '#fff' }} className="rounded-2xl p-4">
+              <View className="flex-row items-center justify-between mb-3">
+                <Text className="text-base font-semibold text-black">All Rankings</Text>
+                {loading && <ActivityIndicator size="small" color={'#41DA93'} />}
+              </View>
+              {loading ? (
+                <View>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <View key={i} className="flex-row items-center py-3" style={{ alignItems: 'center' }}>
+                      <Skeleton height={40} width={40} style={{ borderRadius: 20, marginRight: 12 }} />
+                      <View style={{ flex: 1 }}>
+                        <Skeleton height={12} width={'60%'} style={{ marginBottom: 6 }} />
+                        <Skeleton height={10} width={'40%'} />
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : !leaderboardData || leaderboardData.length === 0 ? (
+                <Text className="text-sm text-gray-600">No data</Text>
+              ) : (
+                <Leaderboard leaderboardData={leaderboardData} />
+              )}
+            </View>
+          </View>
 
           {/* leaderboard moved to its own tab/screen */}
 

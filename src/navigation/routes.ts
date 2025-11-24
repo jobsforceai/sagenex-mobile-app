@@ -18,6 +18,8 @@ export enum MainRoutes {
     Leaderboard = 'Leaderboard',
     MyTree = 'MyTree',
     Wallet = 'Wallet',
+    WalletHistory = 'WalletHistory',
+    Course = 'Course',
     Settings = 'Settings'
 }
 
@@ -44,6 +46,8 @@ export type MainStackParamList = {
     MainTabs: NavigatorScreenParams<MainTabParamList>;
     [MainRoutes.Profile]: undefined;
     [MainRoutes.Notifications]: undefined;
+    [MainRoutes.WalletHistory]: undefined;
+    Course: { courseId: string } | undefined;
     Rewards: undefined;
     KYC: undefined;
     Payouts: undefined;

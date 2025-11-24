@@ -126,11 +126,7 @@ const CryptoDeposit: React.FC = () => {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    // shadows removed for flat design
   },
 });
 

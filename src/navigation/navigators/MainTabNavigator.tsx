@@ -37,7 +37,7 @@ const MainTabNavigator = () => {
               return <TabBarIcon
                 Icon={LeaderboardIcon}
                 focused={focused}
-                size={size} />
+                size={30} />
 
             case MainRoutes.MyTree:
               return <TabBarIcon

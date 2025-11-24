@@ -3,7 +3,7 @@ import Svg, { Circle, Defs, FeBlend, FeFlood, FeGaussianBlur, Filter, G } from '
 
 const GreenGradient = () => {
     return (
-        <Svg xmlns="http://www.w3.org/2000/svg" width="402" height="782" viewBox="0 0 402 782" fill="none">
+        <Svg width={402} height={782} viewBox="0 0 402 782" fill="none">
             <G filter="url(#filter0_f_103_168)">
                 <Circle cx="201.5" cy="301.5" r="183.5" fill="#00562E" />
             </G>

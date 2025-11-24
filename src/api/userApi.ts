@@ -69,6 +69,13 @@ export async function getPayouts() {
   return handleApiResponse(res as Response);
 }
 
+export async function getCurrentPayoutProgress() {
+  const res = await fetch(`${API_BASE_URL}/api/v1/user/payouts/current`, {
+    headers: await getAuthHeaders(),
+  });
+  return handleApiResponse(res as Response);
+}
+
 export async function getTeamTree() {
   const res = await fetch(`${API_BASE_URL}/api/v1/user/team/tree`, {
     headers: await getAuthHeaders(),
@@ -221,6 +228,7 @@ export default {
   getProfileData,
   updateUserProfile,
   getPayouts,
+  getCurrentPayoutProgress,
   getTeamTree,
   getWalletTransactions,
   getWalletData,

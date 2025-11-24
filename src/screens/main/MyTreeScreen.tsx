@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Pressable, Modal, TextInput, StyleSheet, Dimensions, Animated, PanResponder } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Pressable, Modal, TextInput, StyleSheet, Dimensions, Animated } from 'react-native';
+import { PanGestureHandler, PinchGestureHandler, GestureHandlerRootView } from 'react-native-gesture-handler';
 import userApi from '../../api/userApi';
 import { UserNode, ParentNode, QueuedUser } from '../../types/types';
 import Svg, { Path, Rect, G, Text as SvgText } from 'react-native-svg';
@@ -144,12 +145,14 @@ function renderNodes(group: LaidOut[], isRootTop = true): React.ReactElement[] {
 // ====== ZOOMABLE CANVAS (using React Native Animated API) ======
 const ZoomableTree = ({
   treeRoot,
-  width = SCREEN_WIDTH * 2,
+  width = SCREEN_WIDTH * 2 + 80, // add horizontal margin to avoid clipping
   height = 1000,
+  onInteractionChange,
 }: {
   treeRoot: UserNode;
   width?: number;
   height?: number;
+  onInteractionChange?: (active: boolean) => void;
 }) => {
   const scale = useRef(new Animated.Value(1)).current;
   const translateX = useRef(new Animated.Value(0)).current;
@@ -157,37 +160,66 @@ const ZoomableTree = ({
   const [currentScale, setCurrentScale] = useState(1);
   const [currentTranslate, setCurrentTranslate] = useState({ x: 0, y: 0 });
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        translateX.setOffset(currentTranslate.x);
-        translateY.setOffset(currentTranslate.y);
-        translateX.setValue(0);
-        translateY.setValue(0);
-      },
-      onPanResponderMove: Animated.event(
-        [
-          null,
-          { dx: translateX, dy: translateY }
-        ],
-        { useNativeDriver: false }
-      ),
-      onPanResponderRelease: (_, gestureState) => {
-        translateX.flattenOffset();
-        translateY.flattenOffset();
-        setCurrentTranslate({
-          x: currentTranslate.x + gestureState.dx,
-          y: currentTranslate.y + gestureState.dy
-        });
-      }
-    })
-  ).current;
+  const baseScale = useRef(1);
+  const clamp = (v: number) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, v));
+
+  // Gesture-handler refs
+  const panRef = useRef<any>(null);
+  const pinchRef = useRef<any>(null);
+
+  // Pinch handler: map nativeEvent.scale to Animated scale
+  const onPinchEvent = Animated.event(
+    [{ nativeEvent: { scale: new Animated.Value(1) } }],
+    { useNativeDriver: false }
+  );
+
+  const handlePinch = ({ nativeEvent }: any) => {
+    // nativeEvent.scale is the relative scale since gesture start
+    // debug
+    // eslint-disable-next-line no-console
+    console.log('pinch event', nativeEvent.scale, nativeEvent.state);
+    if (onInteractionChange) onInteractionChange(true);
+    const next = clamp(baseScale.current * nativeEvent.scale);
+    scale.setValue(next);
+    setCurrentScale(next);
+  };
+
+  const handlePinchStateChange = ({ nativeEvent }: any) => {
+    // eslint-disable-next-line no-console
+    console.log('pinch state change', nativeEvent.state);
+    if (nativeEvent.state === 5 /* END */ || nativeEvent.state === 3 /* CANCELLED */) {
+      baseScale.current = currentScale;
+      if (onInteractionChange) onInteractionChange(false);
+    }
+  };
+
+  // Pan handler
+  const handlePan = Animated.event(
+    [{ nativeEvent: { translationX: translateX, translationY: translateY } }],
+    { useNativeDriver: false }
+  );
+
+  const handlePanStateChange = ({ nativeEvent }: any) => {
+    // eslint-disable-next-line no-console
+    console.log('pan state', nativeEvent.state, nativeEvent.translationX, nativeEvent.translationY);
+    if (nativeEvent.state === 2 /* BEGIN */ || nativeEvent.state === 4 /* ACTIVE */) {
+      if (onInteractionChange) onInteractionChange(true);
+    }
+    if (nativeEvent.state === 5 /* END */ || nativeEvent.state === 3 /* CANCELLED */) {
+      if (onInteractionChange) onInteractionChange(false);
+    }
+    if (nativeEvent.state === 5 /* END */) {
+      // accumulate translation
+      translateX.extractOffset();
+      translateY.extractOffset();
+      setCurrentTranslate({ x: currentTranslate.x + nativeEvent.translationX, y: currentTranslate.y + nativeEvent.translationY });
+    }
+  };
 
   const handleZoomIn = () => {
     const newScale = Math.min(currentScale * 1.2, MAX_SCALE);
     setCurrentScale(newScale);
+    baseScale.current = newScale;
     Animated.spring(scale, {
       toValue: newScale,
       useNativeDriver: false,
@@ -197,6 +229,7 @@ const ZoomableTree = ({
   const handleZoomOut = () => {
     const newScale = Math.max(currentScale / 1.2, MIN_SCALE);
     setCurrentScale(newScale);
+    baseScale.current = newScale;
     Animated.spring(scale, {
       toValue: newScale,
       useNativeDriver: false,
@@ -204,18 +237,38 @@ const ZoomableTree = ({
   };
 
   const handleResetZoom = () => {
+    // reset to centered initial offsets (if available)
+    const init = initialOffset.current ?? { x: 0, y: 0 };
     setCurrentScale(1);
-    setCurrentTranslate({ x: 0, y: 0 });
+    baseScale.current = 1;
+    setCurrentTranslate({ x: init.x, y: init.y });
     Animated.parallel([
       Animated.spring(scale, { toValue: 1, useNativeDriver: false }),
-      Animated.spring(translateX, { toValue: 0, useNativeDriver: false }),
-      Animated.spring(translateY, { toValue: 0, useNativeDriver: false }),
+      Animated.spring(translateX, { toValue: init.x, useNativeDriver: false }),
+      Animated.spring(translateY, { toValue: init.y, useNativeDriver: false }),
     ]).start();
   };
 
   // Compose: SAGENEX -> main user -> (6) children
   const composed = withSagenexRoot(treeRoot);
   const laid = layoutTree(composed, width / 2, 80);
+
+  // Compute initial center offsets so the root node sits centered in the visible canvas
+  const containerPadding = 40; // matches paddingHorizontal used in render
+  const containerHeight = 520; // matches the canvas height
+  const visibleWidth = SCREEN_WIDTH - containerPadding * 2;
+  const initialOffset = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const initX = visibleWidth / 2 - laid.x;
+    const initY = containerHeight / 2 - laid.y;
+    initialOffset.current = { x: initX, y: initY };
+    // place SVG so the root appears centered in the viewport
+    translateX.setValue(initX);
+    translateY.setValue(initY);
+    setCurrentTranslate({ x: initX, y: initY });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [laid.x, laid.y]);
 
   return (
     <View>
@@ -232,27 +285,43 @@ const ZoomableTree = ({
         </Pressable>
       </View>
 
-      {/* Tree Canvas */}
+      {/* Tree Canvas - add horizontal padding so scaling doesn't clip edges */}
       <View style={{ borderRadius: 12, overflow: 'hidden', height: 520, backgroundColor: THEME.board }}>
-        <View {...panResponder.panHandlers} style={{ flex: 1 }}>
-          <Animated.View
-            style={{
-              flex: 1,
-              transform: [
-                { translateX },
-                { translateY },
-                { scale }
-              ]
-            }}
-          >
-            <Svg width={width} height={height}>
-              {/* Curved edges first so boxes appear above */}
-              {renderCurvedEdges([laid])}
-              {/* Rectangular nodes */}
-              {renderNodes([laid])}
-            </Svg>
+        <PinchGestureHandler
+          ref={pinchRef}
+          onGestureEvent={({ nativeEvent }) => handlePinch({ nativeEvent })}
+          onHandlerStateChange={({ nativeEvent }) => handlePinchStateChange({ nativeEvent })}
+          simultaneousHandlers={panRef}
+        >
+          <Animated.View style={{ flex: 1 }}>
+            <PanGestureHandler
+              ref={panRef}
+              onGestureEvent={handlePan}
+              onHandlerStateChange={handlePanStateChange}
+              simultaneousHandlers={pinchRef}
+            >
+              <Animated.View style={{ flex: 1, paddingHorizontal: 40 }}>
+                <Animated.View
+                  style={{
+                    flex: 1,
+                    transform: [
+                      { translateX },
+                      { translateY },
+                      { scale }
+                    ]
+                  }}
+                >
+                  <Svg width={width} height={height}>
+                    {/* Curved edges first so boxes appear above */}
+                    {renderCurvedEdges([laid])}
+                    {/* Rectangular nodes */}
+                    {renderNodes([laid])}
+                  </Svg>
+                </Animated.View>
+              </Animated.View>
+            </PanGestureHandler>
           </Animated.View>
-        </View>
+        </PinchGestureHandler>
       </View>
     </View>
   );
@@ -375,11 +444,15 @@ const MyTreeScreen: React.FC = () => {
     loadOptions();
   }, [placingUser]);
 
+  // disable parent scrolling when interacting with the tree canvas so gestures are not stolen
+  const [treeInteracting, setTreeInteracting] = useState(false);
+
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-gray-100">
       <ScrollView
         className="flex-1"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        scrollEnabled={!treeInteracting}
       >
         <View className="px-4 pt-6 pb-4">
           <Text className="text-2xl font-bold text-black">My Tree</Text>
@@ -450,8 +523,8 @@ const MyTreeScreen: React.FC = () => {
                   </View>
                 )}
 
-                {/* Use dummy data for now, switch to treeData.tree when backend is ready */}
-                <ZoomableTree treeRoot={dummyTreeData} />
+                {/* Use live tree data from backend when available, fallback to dummy while loading */}
+                <ZoomableTree treeRoot={treeData?.tree ?? dummyTreeData} onInteractionChange={setTreeInteracting} />
               </View>
             )}
           </View>
