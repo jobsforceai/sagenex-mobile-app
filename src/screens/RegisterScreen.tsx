@@ -24,9 +24,8 @@ const RegisterScreen = () => {
       if (data.error) {
         Alert.alert('Error', data.error)
       } else {
-        Alert.alert('Success', data.message || 'Registration successful. Please check your email for OTP.', [
-          { text: 'OK', onPress: () => navigation.navigate(AuthRoutes.Login) },
-        ])
+        // Navigate to Login and open OTP view with prefilled email and message
+        navigation.navigate(AuthRoutes.Login as any, { initialView: 'otp', email, message: data.message || 'Registration successful. Enter the OTP sent to your email.' })
       }
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Unknown error')

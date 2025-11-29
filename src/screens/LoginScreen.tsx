@@ -10,10 +10,17 @@ import {
 } from 'react-native'
 import { loginOtp, verifyEmail } from '../api/authApi'
 import useAuthStore from '../store/authStore'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import { AuthRoutes } from '../navigation/routes'
+import type { RouteProp } from '@react-navigation/native'
 
 type ViewMode = 'main' | 'email-login' | 'otp'
+
+type LoginRouteParams = {
+    initialView?: ViewMode;
+    email?: string;
+    message?: string;
+}
 
 const LoginScreen = () => {
     const [view, setView] = useState<ViewMode>('main')
@@ -28,9 +35,16 @@ const LoginScreen = () => {
 
     const login = useAuthStore((s) => s.login)
     const navigation = useNavigation<any>()
+    const route = useRoute<RouteProp<Record<string, LoginRouteParams>, string>>();
 
     useEffect(() => {
-        // placeholder: if you want to auto-fill sponsor from deep link, add logic here
+        // handle incoming route params to auto-show OTP when navigated from Register
+        const params = route.params as LoginRouteParams | undefined
+        if (params) {
+            if (params.email) setEmail(params.email)
+            if (params.message) setMessage(params.message)
+            if (params.initialView) setView(params.initialView)
+        }
     }, [])
 
     const changeView = (newView: ViewMode) => {
